@@ -9,9 +9,9 @@ Use the plugin's generated MCP tools to work with Hetzner Cloud and Storage Boxe
 
 ## Authentication
 
-The MCP reads `HETZNER_API_TOKEN` from its process environment and sends the token directly to Hetzner. Tokens belong to a project and have read-only or read/write permissions. Hetzner Cloud does not provide an account-wide OAuth sign-in for these APIs.
+The MCP retrieves the project API token from the operating system credential store and sends it directly to Hetzner. Tokens belong to a project and have read-only or read/write permissions.
 
-If authentication is missing, direct the user to create a token under the project's **Security → API Tokens** in [Hetzner Console](https://console.hetzner.com/) and configure `HETZNER_API_TOKEN` in the environment that launches Codex. For the macOS desktop app, set it with `launchctl setenv` in Terminal, then fully quit and reopen Codex. Keep the token out of chat, tool arguments, and committed files. Changing the environment requires restarting the MCP connection.
+If the connection is missing, call `hetzner_configure` with `{}` to open the private local setup page in the user's default browser. Let the user enter their token privately on that page. The page also supports replacing the token and disconnecting. Keep the token out of chat and MCP arguments, and do not inspect the setup page after the user starts entering a token. Use `hetzner_connection_status` to check whether a credential is stored; it does not validate the token with Hetzner. The packaged `hetzner-cloud-setup` skill contains the setup workflow.
 
 ## API workflow
 

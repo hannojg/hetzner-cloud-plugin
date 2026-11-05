@@ -5,10 +5,7 @@
       "args": [
         "./dist/server.mjs"
       ],
-      "cwd": ".",
-      "env_vars": [
-        "HETZNER_API_TOKEN"
-      ]
+      "cwd": "."
     }
   }
 }

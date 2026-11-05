@@ -2,6 +2,8 @@ import type { CallToolResult } from '@modelcontextprotocol/server';
 import { Ajv2020 } from 'ajv/dist/2020.js';
 import type { ValidateFunction } from 'ajv';
 import type { ApiName, Operation } from './api-types.js';
+import type { CredentialStore } from './credential-store.js';
+import { version } from './version.js';
 
 const baseUrls: Record<ApiName, string> = {
   cloud: 'https://api.hetzner.cloud/v1',
@@ -21,7 +23,7 @@ interface OperationArguments {
 }
 
 export interface ClientOptions {
-  token?: string;
+  store: CredentialStore;
   fetch?: typeof globalThis.fetch;
   signal?: AbortSignal;
 }
@@ -74,7 +76,7 @@ function requestUrl(operation: Operation, args: OperationArguments): URL {
 export async function executeOperation(
   operation: Operation,
   args: unknown,
-  options: ClientOptions = {},
+  options: ClientOptions,
 ): Promise<CallToolResult> {
   let validate = validators.get(operation);
   if (validate === undefined) {
@@ -87,16 +89,21 @@ export async function executeOperation(
     const details = validate.errors;
     return toolResult({ error: { code: 'invalid_arguments', message: 'Arguments do not match the Hetzner API schema.', details } }, true);
   }
-  const token = options.token?.trim();
-  if (token === undefined || token.length === 0) {
-    return toolResult({ error: { code: 'missing_token', message: 'Set HETZNER_API_TOKEN to a project API token from https://console.hetzner.com/ (Security → API Tokens), then restart Codex.' } }, true);
+  let token: string | null;
+  try {
+    token = await options.store.read();
+  } catch {
+    return toolResult({ error: { code: 'credential_store_unavailable', message: 'The system credential store could not be read. Unlock it and try again.' } }, true);
+  }
+  if (token === null) {
+    return toolResult({ error: { code: 'not_connected', message: 'Run Hetzner Cloud plugin setup to connect your project. Enter the API token only in the private setup page.' } }, true);
   }
 
   const url = requestUrl(operation, input);
   const headers: Record<string, string> = {
     Authorization: `Bearer ${token}`,
     Accept: 'application/json',
-    'User-Agent': 'hetzner-cloud-plugin/0.1.0',
+    'User-Agent': `hetzner-cloud-plugin/${version}`,
   };
   let body: string | undefined;
   if (input.body !== undefined) {

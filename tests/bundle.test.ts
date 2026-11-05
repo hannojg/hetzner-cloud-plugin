@@ -21,7 +21,7 @@ test('committed bundle starts from a standalone plugin directory without npm dep
   const pluginUrl = new URL('../plugins/hetzner-cloud/', import.meta.url);
   const pluginPath = fileURLToPath(pluginUrl);
   await cp(pluginPath, temporaryPath, { recursive: true });
-  const transport = new StdioClientTransport({ command: process.execPath, args: ['./dist/server.mjs'], cwd: temporaryPath, env: { HETZNER_API_TOKEN: '' }, stderr: 'pipe' });
+  const transport = new StdioClientTransport({ command: process.execPath, args: ['./dist/server.mjs'], cwd: temporaryPath, stderr: 'pipe' });
   const client = new Client({ name: 'bundle-smoke-test', version: '0.1.0' });
   let stderr = '';
   transport.stderr?.on('data', (chunk) => {
@@ -30,13 +30,13 @@ test('committed bundle starts from a standalone plugin directory without npm dep
   try {
     await client.connect(transport);
     const listed = await client.listTools();
-    assert.equal(listed.tools.length, 222);
-    const result = await client.callTool({ name: 'cloud_list_servers', arguments: {} });
+    assert.equal(listed.tools.length, 224);
+    const result = await client.callTool({ name: 'hetzner_connection_status', arguments: { token: 'rejected-before-keyring-access' } });
     assert.equal(result.isError, true);
     const payload = result.structuredContent;
     requireRecord(payload);
     const error = payload.error as Record<string, unknown>;
-    assert.equal(error.code, 'missing_token');
+    assert.equal(error.code, 'invalid_arguments');
     assert.equal(stderr, '');
   } finally {
     await client.close();

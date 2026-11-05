@@ -4,6 +4,7 @@ import test from 'node:test';
 import { Client, InMemoryTransport } from '@modelcontextprotocol/client';
 import type { CallToolResult } from '@modelcontextprotocol/server';
 import { createServer } from '../src/server.js';
+import { MemoryStore } from './helpers.js';
 
 type ServerOptions = Parameters<typeof createServer>[0];
 
@@ -45,7 +46,7 @@ async function rejectUnexpectedFetch(): Promise<Response> {
 }
 
 test('MCP discovery covers every official operation and advertises read/write annotations', async () => {
-  const expected = new Set<string>();
+  const expected = new Set<string>(['hetzner_configure', 'hetzner_connection_status']);
   for (const api of ['cloud', 'hetzner']) {
     const url = new URL(`../spec/${api}.spec.json`, import.meta.url);
     const source = await readFile(url, 'utf8');
@@ -59,11 +60,12 @@ test('MCP discovery covers every official operation and advertises read/write an
       }
     }
   }
-  await withClient({ token: '', fetch: rejectUnexpectedFetch }, async (client) => {
+  const store = new MemoryStore();
+  await withClient({ store, fetch: rejectUnexpectedFetch }, async (client) => {
     const result = await client.listTools();
     const names = result.tools.map((tool) => tool.name);
     const actual = new Set(names);
-    assert.equal(actual.size, 222);
+    assert.equal(actual.size, 224);
     assert.deepEqual(actual, expected);
     const read = result.tools.find((tool) => tool.name === 'cloud_list_servers');
     const write = result.tools.find((tool) => tool.name === 'cloud_delete_server');
@@ -73,15 +75,16 @@ test('MCP discovery covers every official operation and advertises read/write an
   });
 });
 
-test('legacy Codex MCP initialization supports discovery and reports a missing token without making a request', async () => {
-  await withClient({ token: '', fetch: rejectUnexpectedFetch }, async (client) => {
+test('legacy Codex MCP initialization supports discovery without stored credentials', async () => {
+  const store = new MemoryStore();
+  await withClient({ store, fetch: rejectUnexpectedFetch }, async (client) => {
     const result = await client.listTools();
-    assert.equal(result.tools.length, 222);
+    assert.equal(result.tools.length, 224);
     const response = await client.callTool({ name: 'cloud_list_servers', arguments: {} });
     assert.equal(response.isError, true);
     const payload = content(response);
     const error = payload.error as Record<string, unknown>;
-    assert.equal(error.code, 'missing_token');
+    assert.equal(error.code, 'not_connected');
   }, true);
 });
 
@@ -91,7 +94,8 @@ test('invalid enum, missing path, missing body fields and unknown query keys nev
     calls += 1;
     return new Response('{}');
   };
-  await withClient({ token: 'test-token', fetch: fetchMock }, async (client) => {
+  const store = new MemoryStore('test-token');
+  await withClient({ store, fetch: fetchMock }, async (client) => {
     const cases = [
       { name: 'cloud_list_servers', arguments: { query: { status: ['sleeping'] } } },
       { name: 'cloud_get_server', arguments: {} },
@@ -109,6 +113,7 @@ test('invalid enum, missing path, missing body fields and unknown query keys nev
     }
   });
   assert.equal(calls, 0);
+  assert.equal(store.reads, 0);
 });
 
 test('cloud query arrays repeat keys, selectors are encoded, and pagination metadata is retained', async () => {
@@ -136,7 +141,8 @@ test('cloud query arrays repeat keys, selectors are encoded, and pagination meta
     const body = JSON.stringify(data);
     return new Response(body, { headers: { 'Content-Type': 'application/json', 'RateLimit-Limit': '3600', 'RateLimit-Remaining': '3599', 'RateLimit-Reset': '1234' } });
   };
-  await withClient({ token: 'test-token', fetch: fetchMock }, async (client) => {
+  const store = new MemoryStore('test-token');
+  await withClient({ store, fetch: fetchMock }, async (client) => {
     const response = await client.callTool({ name: 'cloud_list_servers', arguments: { query: { status: ['running', 'off'], label_selector: 'env=prod,service in (api,web)', page: 2, per_page: 50 } } });
     assert.equal(response.isError, false);
     const payload = content(response);
@@ -164,7 +170,8 @@ test('server creation preserves the JSON body without adding defaults or retryin
     const response = JSON.stringify(data);
     return new Response(response, { status: 201 });
   };
-  await withClient({ token: 'test-token', fetch: fetchMock }, async (client) => {
+  const store = new MemoryStore('test-token');
+  await withClient({ store, fetch: fetchMock }, async (client) => {
     const response = await client.callTool({ name: 'cloud_create_server', arguments: { body } });
     const payload = content(response);
     assert.deepEqual(payload.data, data);
@@ -188,7 +195,8 @@ test('Storage Box operations use api.hetzner.com and serialize path parameters a
     }
     return new Response('{"storage_box":{"id":42}}');
   };
-  await withClient({ token: 'test-token', fetch: fetchMock }, async (client) => {
+  const store = new MemoryStore('test-token');
+  await withClient({ store, fetch: fetchMock }, async (client) => {
     const created = await client.callTool({ name: 'hetzner_create_storage_box', arguments: { body } });
     assert.equal(created.isError, false);
     const read = await client.callTool({ name: 'hetzner_get_storage_box', arguments: { path: { id: 42 } } });
@@ -206,7 +214,8 @@ test('upstream authentication and rate-limit errors preserve details and are ret
       const response = JSON.stringify(data);
       return new Response(response, { status, headers: { 'RateLimit-Remaining': '0', 'Retry-After': '60' } });
     };
-    await withClient({ token: 'test-token', fetch: fetchMock }, async (client) => {
+    const store = new MemoryStore('test-token');
+    await withClient({ store, fetch: fetchMock }, async (client) => {
       const response = await client.callTool({ name: 'cloud_create_server', arguments: { body: { name: 'test', server_type: 'cpx22', image: 'ubuntu-24.04' } } });
       assert.equal(response.isError, true);
       const payload = content(response);
@@ -225,7 +234,8 @@ test('empty successful delete response is represented without inventing a JSON b
     assert.equal(init?.method, 'DELETE');
     return new Response(null, { status: 204 });
   };
-  await withClient({ token: 'test-token', fetch: fetchMock }, async (client) => {
+  const store = new MemoryStore('test-token');
+  await withClient({ store, fetch: fetchMock }, async (client) => {
     const response = await client.callTool({ name: 'cloud_delete_server', arguments: { path: { id: 42 } } });
     assert.equal(response.isError, false);
     const payload = content(response);
@@ -235,7 +245,8 @@ test('empty successful delete response is represented without inventing a JSON b
 });
 
 test('unknown tools return an MCP error without making a request', async () => {
-  await withClient({ token: 'test-token', fetch: rejectUnexpectedFetch }, async (client) => {
+  const store = new MemoryStore('test-token');
+  await withClient({ store, fetch: rejectUnexpectedFetch }, async (client) => {
     const response = await client.callTool({ name: 'cloud_invented_operation', arguments: {} });
     assert.equal(response.isError, true);
   });
@@ -248,8 +259,168 @@ test('DNS string path parameters are encoded as single segments', async () => {
     assert.equal(inputUrl, 'https://api.hetzner.cloud/v1/zones/example.com/rrsets/name%2Fwith%3Fdelimiters%23/TXT');
     return new Response('{"rrset":{"name":"name/with?delimiters#","type":"TXT"}}');
   };
-  await withClient({ token: 'test-token', fetch: fetchMock }, async (client) => {
+  const store = new MemoryStore('test-token');
+  await withClient({ store, fetch: fetchMock }, async (client) => {
     const response = await client.callTool({ name: 'cloud_get_zone_rrset', arguments: { path: { id_or_name: 'example.com', rr_name: 'name/with?delimiters#', rr_type: 'TXT' } } });
     assert.equal(response.isError, false);
+  });
+});
+
+
+test('credential changes and disconnection take effect without restarting the MCP server', async () => {
+  const store = new MemoryStore('first-token');
+  const authorizations: Array<string | null> = [];
+  const fetchMock: typeof globalThis.fetch = async (_input, init) => {
+    const headers = new Headers(init?.headers);
+    const authorization = headers.get('authorization');
+    authorizations.push(authorization);
+    return new Response('{"servers":[]}');
+  };
+  await withClient({ store, fetch: fetchMock }, async (client) => {
+    const first = await client.callTool({ name: 'cloud_list_servers', arguments: {} });
+    assert.equal(first.isError, false);
+    await store.write('replacement-token');
+    const replacement = await client.callTool({ name: 'cloud_list_servers', arguments: {} });
+    assert.equal(replacement.isError, false);
+    await store.remove();
+    const disconnected = await client.callTool({ name: 'cloud_list_servers', arguments: {} });
+    assert.equal(disconnected.isError, true);
+  });
+  assert.deepEqual(authorizations, ['Bearer first-token', 'Bearer replacement-token']);
+});
+
+test('connection status exposes only a connected flag and tool inputs never accept credentials', async () => {
+  const token = 'secret-for-status-test';
+  const store = new MemoryStore(token);
+  await withClient({ store, fetch: rejectUnexpectedFetch }, async (client) => {
+    const status = await client.callTool({ name: 'hetzner_connection_status', arguments: {} });
+    const payload = content(status);
+    assert.deepEqual(payload, { connected: true });
+    const serialized = JSON.stringify(status);
+    const containsToken = serialized.includes(token);
+    assert.equal(containsToken, false);
+    const listed = await client.listTools();
+    const authTools = listed.tools.filter((tool) => tool.name === 'hetzner_configure' || tool.name === 'hetzner_connection_status');
+    assert.equal(authTools.length, 2);
+    for (const tool of authTools) {
+      assert.deepEqual(tool.inputSchema.properties, {});
+      assert.equal(tool.inputSchema.additionalProperties, false);
+      const rejected = await client.callTool({ name: tool.name, arguments: { token } });
+      assert.equal(rejected.isError, true);
+      const output = JSON.stringify(rejected);
+      const echoesToken = output.includes(token);
+      assert.equal(echoesToken, false);
+    }
+    await store.remove();
+    const disconnected = await client.callTool({ name: 'hetzner_connection_status', arguments: {} });
+    const disconnectedPayload = content(disconnected);
+    assert.deepEqual(disconnectedPayload, { connected: false });
+  });
+});
+
+test('configure opens only the local setup URL and returns no stored credentials', async () => {
+  const token = 'secret-for-configure-test';
+  const store = new MemoryStore(token);
+  const opened: string[] = [];
+  const openBrowser = async (url: string) => {
+    opened.push(url);
+  };
+  await withClient({ store, fetch: rejectUnexpectedFetch, openBrowser }, async (client) => {
+    const configured = await client.callTool({ name: 'hetzner_configure', arguments: {} });
+    assert.equal(configured.isError, false);
+    const payload = content(configured);
+    assert.equal(typeof payload.url, 'string');
+    assert.equal(typeof payload.expiresAt, 'string');
+    assert.deepEqual(opened, [payload.url]);
+    const setupUrl = String(payload.url);
+    const url = new URL(setupUrl);
+    assert.equal(url.hostname, '127.0.0.1');
+    assert.equal(url.protocol, 'http:');
+    assert.ok(url.port);
+    const serialized = JSON.stringify(configured);
+    const containsToken = serialized.includes(token);
+    assert.equal(containsToken, false);
+    const page = await globalThis.fetch(setupUrl);
+    const html = await page.text();
+    const prefillsToken = html.includes(token);
+    assert.equal(prefillsToken, false);
+  });
+});
+
+test('an old token environment variable cannot supply credentials when the keyring is empty', async () => {
+  const previous = process.env.HETZNER_API_TOKEN;
+  process.env.HETZNER_API_TOKEN = 'obsolete-environment-token';
+  try {
+    const store = new MemoryStore();
+    await withClient({ store, fetch: rejectUnexpectedFetch }, async (client) => {
+      const status = await client.callTool({ name: 'hetzner_connection_status', arguments: {} });
+      const payload = content(status);
+      assert.deepEqual(payload, { connected: false });
+      const result = await client.callTool({ name: 'cloud_list_servers', arguments: {} });
+      assert.equal(result.isError, true);
+      const resultPayload = content(result);
+      const error = resultPayload.error as Record<string, unknown>;
+      assert.equal(error.code, 'not_connected');
+    });
+  } finally {
+    if (previous) {
+      process.env.HETZNER_API_TOKEN = previous;
+    } else {
+      delete process.env.HETZNER_API_TOKEN;
+    }
+  }
+});
+
+
+test('unavailable keyring errors are sanitized and prevent API access', async () => {
+  const secret = 'secret-inside-native-error';
+  const store = new MemoryStore();
+  store.read = async () => {
+    throw new Error(`Credential store failure ${secret}`);
+  };
+  await withClient({ store, fetch: rejectUnexpectedFetch }, async (client) => {
+    for (const name of ['cloud_list_servers', 'hetzner_connection_status']) {
+      const result = await client.callTool({ name, arguments: {} });
+      assert.equal(result.isError, true);
+      const payload = content(result);
+      const error = payload.error as Record<string, unknown>;
+      assert.equal(error.code, 'credential_store_unavailable');
+      const serialized = JSON.stringify(result);
+      const exposesSecret = serialized.includes(secret);
+      assert.equal(exposesSecret, false);
+    }
+  });
+});
+
+test('concurrent configure calls open one setup page while the browser is starting', async () => {
+  const store = new MemoryStore();
+  let releaseBrowser: () => void = () => {};
+  let reportOpened: () => void = () => {};
+  const browserCanFinish = new Promise<void>((resolve) => {
+    releaseBrowser = resolve;
+  });
+  const browserOpened = new Promise<void>((resolve) => {
+    reportOpened = resolve;
+  });
+  let opens = 0;
+  const openBrowser = async () => {
+    opens += 1;
+    reportOpened();
+    await browserCanFinish;
+  };
+  await withClient({ store, fetch: rejectUnexpectedFetch, openBrowser }, async (client) => {
+    const first = client.callTool({ name: 'hetzner_configure', arguments: {} });
+    await browserOpened;
+    try {
+      const duplicate = await client.callTool({ name: 'hetzner_configure', arguments: {} });
+      assert.equal(duplicate.isError, true);
+      const payload = content(duplicate);
+      const error = payload.error as Record<string, unknown>;
+      assert.equal(error.code, 'setup_busy');
+      assert.equal(opens, 1);
+    } finally {
+      releaseBrowser();
+      await first;
+    }
   });
 });
