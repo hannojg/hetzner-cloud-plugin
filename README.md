@@ -1,91 +1,102 @@
 # Hetzner Cloud Plugin
 
-A Codex plugin with a local MCP server that mirrors the official [Hetzner Cloud and Storage Boxes APIs](https://docs.hetzner.cloud/).
+A Codex plugin that manages [Hetzner Cloud and Storage Boxes](https://docs.hetzner.cloud/) through skills and a local API client. Requests go directly from your computer to Hetzner.
 
-The plugin exposes **222 generated API tools** plus **2 connection tools**. It covers servers and their actions, volumes, networks, floating and primary IPs, firewalls, load balancers, DNS, certificates, images, SSH keys, placement groups, pricing, locations, and Storage Boxes. Every operation in the checked-in API snapshots becomes a tool with its own input schema.
+The client covers **all 222 operations** in the checked-in official API specifications: servers and their actions, volumes, networks, floating and primary IPs, firewalls, load balancers, DNS, certificates, images, SSH keys, placement groups, pricing, locations, and Storage Boxes.
 
-This is an independent community project, not an official Hetzner product. Robot, the Object Storage S3 API, and account billing are outside these APIs.
+This is an independent community project. Robot dedicated servers, Object Storage's S3 API, and account billing are separate APIs.
 
 ## Requirements
 
 - Codex with local plugin support and a browser on the same computer.
-- Node.js 22 or newer on the PATH used by Codex.
+- Node.js 22 or newer on the local shell's PATH. POSIX shells and Windows PowerShell are supported.
 - An available operating system credential store: macOS Keychain, Windows Credential Manager, or Linux Secret Service.
-- A Hetzner project API token. Use read/write permissions to manage resources; a read-only token can inspect resources.
+- A Hetzner project API token. A read-only token can inspect resources; read/write permissions allow changes.
 
-The committed plugin includes its built MCP server and dependencies. Installing the plugin does not require building it or installing npm packages.
+The plugin includes its built client and dependencies. Users can install the package directly without building it or running `npm install`.
 
 ## Install
 
-Register this repository's marketplace and install its plugin:
+Add this repository's marketplace and install its plugin:
 
 ```sh
 codex plugin marketplace add hannojg/hetzner-cloud-plugin --ref main
 codex plugin add hetzner-cloud@hetzner-cloud
 ```
 
-You can also add the GitHub repository as a marketplace in Codex's plugin settings, then install **Hetzner Cloud Plugin**. Open a new chat after installation.
+You can also add the repository as a marketplace in Codex's plugin settings, then install **Hetzner Cloud Plugin**. Start a new chat after installation so its skills are available.
 
-## Connect your Hetzner project
+## Connect your project
 
-1. Open the installed plugin and select **Setup**. Its packaged onboarding skill opens a private setup page in your browser.
-2. Create an API token in [Hetzner Console](https://console.hetzner.com/), under your project's **Security → API Tokens**.
-3. Paste the token into the setup page and select **Connect**.
+1. Select **Setup** on the installed plugin, or ask Codex: **“Set up my Hetzner Cloud Plugin connection.”**
+2. The setup skill opens a private local page in your default browser.
+3. Create an API token in [Hetzner Console](https://console.hetzner.com/) under **Project → Security → API Tokens**, paste it into that page, and select **Connect**.
 
-The page checks the token with a read-only server-list request, then saves it in your operating system credential store. The connection survives Codex and computer restarts. To use another project, run setup again and replace the saved token. The page also has a **Disconnect** action to delete the saved credential.
+The page validates the token with a read-only request, then stores it in your operating system credential store. The connection survives Codex and computer restarts. Run setup again to replace the token or use **Disconnect** to delete it.
 
-You can start the same flow from chat:
+The setup page runs on `127.0.0.1` on your own computer for up to ten minutes. Its process runs independently while you enter the token. Enter it only in that page: the token stays out of chat and command arguments. The local client retrieves it from the credential store when making API requests.
 
-> Set up my Hetzner Cloud Plugin connection.
+On macOS the credential is stored in Keychain, on Windows in Credential Manager, and on Linux in Secret Service. The store must be available and unlocked. Credential-store errors are reported to the user; environment-variable and plaintext-file credentials are unsupported.
 
-The setup page runs on `127.0.0.1` on your own computer and opens in your default browser. Its temporary session expires after ten minutes. Enter the token only on that page. The token is submitted directly to the local setup server; it is never an MCP tool argument or tool response. Codex receives the setup URL and connection status. The local server sends your token to Hetzner to validate it and authenticate API requests.
-
-On macOS the credential is stored in Keychain, on Windows in Credential Manager, and on Linux in Secret Service. The store must be available and unlocked. The plugin reports store errors instead of saving credentials in a plaintext file. Environment-variable credentials are no longer supported.
-
-If you previously set the token through `launchctl` for version 0.1.0, remove that session-wide value:
+If you used `launchctl` to set the token for version 0.1.0, remove that session-wide value, fully quit and reopen Codex, then complete **Setup**:
 
 ```sh
 launchctl unsetenv HETZNER_API_TOKEN
 ```
 
-Fully quit and reopen Codex to remove that old value from its process environment, then complete **Setup**.
+## Use from Codex
 
-Try an inventory request such as:
+Choose the **Hetzner Cloud Plugin** or invoke its `hetzner-cloud` skill, then describe the task:
 
 > List my Hetzner servers and their status.
 
-Or:
-
 > Show the firewall rules in this project.
 
-To update the marketplace and install its current plugin version:
+> List my Storage Boxes and their usage.
+
+Codex discovers operations and their schemas through the bundled client, then runs the selected operation locally. The client uses the saved token to authenticate directly with Hetzner. Resource access and permissions are enforced by Hetzner.
+
+This is a **skill-only plugin**. It does not register an MCP server or require a hosted service. A short-lived local server exists only while the setup page is open.
+
+## Local client
+
+The installed plugin's client is `plugins/hetzner-cloud/dist/client.mjs` in this repository. Run it with Node.js 22 or newer. Codex resolves Node in its default local command environment with `command -v node` in POSIX shells or `(Get-Command node).Source` in PowerShell, then uses the returned absolute executable path and the installed client's absolute path for subsequent commands. PowerShell uses its `&` call operator to invoke a quoted executable path.
+
+| Command | Purpose |
+| --- | --- |
+| `list [search]` | List operation names and summaries, optionally filtered. |
+| `describe <operation>` | Show the operation's path, query, and body schema. |
+| `call <operation>` | Read JSON arguments from stdin and make one API request. |
+| `status` | Report whether a credential is stored: `{connected:boolean}`. |
+| `setup` | Open private token setup; return `{url,expiresAt}` and exit. |
+
+Cloud operation names start with `cloud_`; Storage Boxes names start with `hetzner_`. Inputs use `path`, `query`, and `body` groups where declared in the API schema. For example, after resolving the actual absolute paths:
+
+```sh
+"/absolute/path/to/node" "/actual/plugin/root/dist/client.mjs" call cloud_list_servers <<'JSON'
+{"query":{"per_page":50}}
+JSON
+```
+
+The quoted heredoc keeps the shell from expanding JSON values. In PowerShell, pipe a literal single-quoted here-string (`@'` … `'@`) into the client invocation. API tokens are never supplied through this command. `call` prints the upstream result in an envelope containing `status`, `data`, and rate-limit details, or an error; failures exit with status 1. `status` checks stored credential presence, not current Hetzner validity.
+
+## API behavior
+
+- Each operation sends one request to the official API selected by that operation.
+- List results preserve pagination metadata. Follow `meta.pagination` for a complete inventory.
+- Resource changes may return asynchronous actions. Check their status before treating the change as finished.
+- The client uses a 30-second request timeout and does not retry automatically. Inspect the resource or action before repeating an interrupted mutation.
+- Creating or resizing resources can incur charges; deletions and other mutations have the same effects as the underlying API calls.
+- Deprecated operations retain the official warnings. The [API coverage reference](docs/api-coverage.md) lists every operation and endpoint.
+
+## Update
 
 ```sh
 codex plugin marketplace upgrade hetzner-cloud
 codex plugin add hetzner-cloud@hetzner-cloud
 ```
 
-Restart Codex after updating. Version 0.2.0 uses the setup page and operating system credential store; users upgrading from 0.1.0 must connect through **Setup** once.
-
-## Connection tools
-
-- `hetzner_configure` takes `{}` and opens a temporary local setup page in your default browser for connecting, replacing the token, or disconnecting. It returns the URL and its expiry. Its input never contains a token. If the browser cannot be opened, the tool reports the error and closes that setup session.
-- `hetzner_connection_status` takes `{}` and reports whether a credential is stored. It does not make a Hetzner request or verify that the saved token is still valid.
-
-Hetzner uses project-scoped bearer tokens for these APIs. The saved token determines the project and its read-only or read/write permissions. API calls go directly to the official API selected by each operation.
-
-## API behavior
-
-- Cloud tools are named `cloud_<operationId>`; Storage Boxes API tools are named `hetzner_<operationId>`.
-- Inputs use `path`, `query`, and `body` groups where declared by the API operation. The tool schema documents their fields.
-- Each tool makes one API request. List results preserve Hetzner's pagination metadata; follow subsequent pages for a complete inventory.
-- Requests use the official API endpoint for their operation and the configured project's bearer token.
-- Resource changes may return asynchronous actions. Check their status before treating the change as finished.
-- The server uses a 30-second request timeout and does not retry mutations automatically. Check the resource or action before retrying a request whose result is uncertain.
-- Errors preserve upstream JSON and rate-limit details. Permissions and project boundaries are enforced by Hetzner.
-- Creating or resizing resources can incur charges; deletions and other mutations have the same effects as the underlying API calls.
-
-The MCP can start and list its tools before a project is connected. API operations retrieve the token from the operating system credential store. The plugin runs locally and sends requests directly to Hetzner; this project has no hosted proxy, credential service, or telemetry endpoint.
+Restart Codex and start a new chat after updating. Version 0.3.0 uses skills and the local direct API client. It retains the private setup flow and OS credential storage introduced in 0.2.0.
 
 ## Development
 
@@ -96,7 +107,7 @@ npm ci
 npm run check
 ```
 
-API snapshots live in `spec/cloud.spec.json` and `spec/hetzner.spec.json`. [Snapshot provenance](spec/README.md) records their official URLs and checksums. The [API coverage reference](docs/api-coverage.md) lists every generated tool, endpoint, and deprecation. After updating the snapshots, regenerate the catalog and bundle:
+The API snapshots in `spec/cloud.spec.json` and `spec/hetzner.spec.json` are the source of truth. [Snapshot provenance](spec/README.md) records the official URLs and checksums. After updating them, regenerate the catalog and bundle:
 
 ```sh
 npm run generate
@@ -104,15 +115,7 @@ npm run build
 npm run check
 ```
 
-Commit the updated catalog and plugin bundle with the source changes. `npm run check` checks TypeScript, generated-file consistency, the bundled server, and tests. Tests use controlled responses and injected credential stores; they do not create or alter Hetzner resources. A real account check requires completing setup and choosing a read-only API call.
-
-With the Codex CLI on your PATH, verify installation and tool discovery in an isolated temporary Codex profile:
-
-```sh
-node scripts/check-host.mjs
-```
-
-This check installs the local package into that temporary profile and asks the real Codex host to load all 224 MCP tools. It checks the packaged onboarding skill and credential-free launch configuration, then removes the profile. It does not read the credential store or change your installed plugins. Set `CODEX_CLI_PATH` if the CLI is elsewhere.
+Commit the catalog and client bundle with the source changes. Checks cover TypeScript, generated-file consistency, the standalone client, and API/setup behavior with controlled responses and injected credential stores. They do not create or alter Hetzner resources. A real account check requires completing setup and choosing a read-only API operation.
 
 To install the local checkout:
 
@@ -121,7 +124,7 @@ codex plugin marketplace add .
 codex plugin add hetzner-cloud@hetzner-cloud
 ```
 
-The marketplace points to `plugins/hetzner-cloud`. The plugin's `.mcp.json` runs the committed `dist/server.mjs` from that directory, so an installed copy works independently of the source checkout.
+The marketplace points to `plugins/hetzner-cloud`. The installed package includes `dist/client.mjs`, its required assets, and both skills.
 
 ## License
 

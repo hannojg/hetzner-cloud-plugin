@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
-import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { dirname, join, delimiter } from 'node:path';
+import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
 
@@ -12,9 +12,7 @@ const osTemporary = tmpdir();
 const prefix = join(osTemporary, 'hetzner-cloud-codex-check-');
 const temporary = await mkdtemp(prefix);
 const profile = join(temporary, 'profile');
-const runtimeDirectory = dirname(process.execPath);
 const env = { ...process.env, CODEX_HOME: profile };
-env.PATH = `${runtimeDirectory}${delimiter}${process.env.PATH ?? ''}`;
 delete env.HETZNER_API_TOKEN;
 const executable = process.env.CODEX_CLI_PATH ?? 'codex';
 const manifestPath = join(root, 'plugins/hetzner-cloud/.codex-plugin/plugin.json');
@@ -117,42 +115,42 @@ try {
   const onboardingRelativePath = './skills/hetzner-cloud-setup/SKILL.md';
   const sourceOnboardingPath = join(plugin.summary.source.path, onboardingRelativePath);
   assert.equal(plugin.onboardingSkill.path, sourceOnboardingPath);
-  assert.equal(plugin.mcpServers.length, 1);
-  const serverName = plugin.mcpServers[0];
-  const inventory = await request('mcpServerStatus/list', { serverName, detail: 'full' });
-  const server = inventory.data.find(item => item.name === serverName);
-  assert.ok(server, 'Codex did not discover the bundled MCP server.');
-  assert.equal(server.toolsError, null);
-  const tools = Object.values(server.tools);
-  const expectedToolCount = operations.length + 2;
-  assert.equal(tools.length, expectedToolCount);
-  const actualNames = tools.map(tool => tool.name);
+  assert.equal(plugin.mcpServers.length, 0);
+  const skillNames = plugin.skills.map(skill => skill.name);
+  skillNames.sort();
+  assert.deepEqual(skillNames, ['hetzner-cloud:hetzner-cloud', 'hetzner-cloud:hetzner-cloud-setup']);
+  for (const skill of plugin.skills) {
+    assert.equal(skill.enabled, true);
+  }
+  const installedClientPath = join(installed.installedPath, 'dist/client.mjs');
+  const standalone = spawnSync(process.execPath, [installedClientPath, 'list'], {
+    cwd: installed.installedPath,
+    env: { ...env, PATH: '/usr/bin:/bin' },
+    encoding: 'utf8',
+    timeout: 30_000,
+    windowsHide: true,
+  });
+  if (standalone.error) throw standalone.error;
+  assert.equal(standalone.status, 0, standalone.stderr);
+  const listed = JSON.parse(standalone.stdout);
+  assert.equal(listed.count, operations.length);
+  const actualNames = listed.operations.map(operation => operation.name);
   actualNames.sort();
   const expectedNames = operations.map(operation => operation.name);
-  expectedNames.push('hetzner_configure', 'hetzner_connection_status');
   expectedNames.sort();
   assert.deepEqual(actualNames, expectedNames);
-  const installedMcpPath = join(installed.installedPath, '.mcp.json');
-  const installedMcpText = await readFile(installedMcpPath, 'utf8');
-  const installedMcp = JSON.parse(installedMcpText);
-  assert.equal(installedMcp.mcpServers['hetzner-cloud'].cwd, '.');
-  assert.equal(installedMcp.mcpServers['hetzner-cloud'].env_vars, undefined);
-  assert.equal(installedMcp.mcpServers['hetzner-cloud'].env, undefined);
+  const installedFiles = await readdir(installed.installedPath);
+  const hasMcpConfig = installedFiles.includes('.mcp.json');
+  assert.equal(hasMcpConfig, false);
   const installedManifestPath = join(installed.installedPath, '.codex-plugin/plugin.json');
   const installedManifestText = await readFile(installedManifestPath, 'utf8');
   const installedManifest = JSON.parse(installedManifestText);
+  assert.equal(installedManifest.mcpServers, undefined);
   assert.equal(installedManifest.extensions['com.openai'].onboardingSkill, onboardingRelativePath);
   assert.equal(installedManifest.requires_local_executor, true);
   const onboardingPath = join(installed.installedPath, onboardingRelativePath);
   await readFile(onboardingPath, 'utf8');
-  const managementNames = ['hetzner_configure', 'hetzner_connection_status'];
-  for (const name of managementNames) {
-    const tool = tools.find(item => item.name === name);
-    const properties = Object.keys(tool.inputSchema.properties);
-    assert.deepEqual(properties, []);
-    assert.equal(tool.inputSchema.additionalProperties, false);
-  }
-  console.log(`Codex installed ${manifest.version} in an isolated profile and loaded all ${tools.length} bundled MCP tools without credentials.`);
+  console.log(`Codex installed ${manifest.version} with both skills and native setup, registered zero MCP servers, and the standalone client listed ${listed.count} operations with a minimal PATH.`);
 } finally {
   if (output) output.close();
   if (host) {

@@ -162,7 +162,7 @@ function buildOperation(api, path, method, source) {
   const name = `${api}_${source.operationId}`;
   const validName = /^[a-zA-Z0-9_-]{1,64}$/.test(name);
   if (validName === false) {
-    throw new Error(`Invalid MCP tool name: ${name}`);
+    throw new Error(`Invalid client operation name: ${name}`);
   }
   const readOnly = method === 'get' || method === 'head' || method === 'options';
   const idempotent = readOnly || method === 'put' || method === 'delete';
@@ -210,7 +210,7 @@ function escapeCell(value) {
 
 const operations = [];
 const metadata = [];
-const toolNames = new Set();
+const operationNames = new Set();
 for (const source of sources) {
   const file = join(root, 'spec', `${source.api}.spec.json`);
   const raw = await readFile(file, 'utf8');
@@ -237,11 +237,11 @@ for (const source of sources) {
         resolved.parameters = [...combinedParameters];
       }
       const operation = buildOperation(source.api, path, method, resolved);
-      const duplicate = toolNames.has(operation.name);
+      const duplicate = operationNames.has(operation.name);
       if (duplicate) {
-        throw new Error(`Duplicate MCP tool name: ${operation.name}`);
+        throw new Error(`Duplicate client operation name: ${operation.name}`);
       }
-      toolNames.add(operation.name);
+      operationNames.add(operation.name);
       operations.push(operation);
       operationCount += 1;
     }
@@ -262,7 +262,7 @@ const sourceLines = [
   '# Official API snapshots',
   '',
   'These unmodified OpenAPI documents were downloaded from Hetzner on 2026-11-05.',
-  'They are the source of truth for generated MCP tools. No schema download occurs at server startup.',
+  'They are the source of truth for generated client operations. No schema download occurs when the client runs.',
   '',
   '| File | Official source | Operations | SHA-256 |',
   '| --- | --- | ---: | --- |',
@@ -276,7 +276,7 @@ sourceLines.push(
   'Review API changes before committing; generated files are deterministic. `npm run generate -- --check` detects stale generated files.',
   '',
   'The generator preserves JSON Schema request semantics, including unions and compositions. It removes the OpenAPI-only `example`, `xml`, `externalDocs`, and `discriminator` annotations from input schemas.',
-  'Deprecated operations remain in the mirror and are marked in tool descriptions and the coverage reference. The datacenter endpoints were removed by Hetzner on 2026-10-01 and should not be used.',
+  'Deprecated operations remain in the mirror and are marked in operation descriptions and the coverage reference. The datacenter endpoints were removed by Hetzner on 2026-10-01 and should not be used.',
   '',
 );
 const sourceReadme = sourceLines.join('\n');
@@ -285,8 +285,8 @@ artifacts.set('spec/README.md', sourceReadme);
 const coverage = [
   '# API coverage',
   '',
-  `The MCP mirrors all ${operations.length} operations in the checked-in official Hetzner API snapshots: 190 Cloud operations and 32 Hetzner Storage Box operations.`,
-  'Each row corresponds to one tool. Tool inputs use `path`, `query`, and `body` groups with the original API field names and request schemas.',
+  `The bundled client mirrors all ${operations.length} operations in the checked-in official Hetzner API snapshots: 190 Cloud operations and 32 Hetzner Storage Box operations.`,
+  'Each row corresponds to one client operation. Inputs use `path`, `query`, and `body` groups with the original API field names and request schemas.',
   '',
   'Cloud resources include servers, server types, volumes, primary and floating IPs, firewalls, networks, load balancers, load balancer types, images, ISOs, SSH keys, certificates, placement groups, DNS zones and RRSets, locations, pricing, and actions.',
   'The Hetzner API additionally covers Storage Boxes, types, folders, snapshots, subaccounts, and their actions.',
@@ -295,7 +295,7 @@ const coverage = [
   '',
   'Deprecated endpoints are retained for a complete specification mirror. In particular, `GET /datacenters` and `GET /datacenters/{id}` were removed on 2026-10-01; use locations and location-specific resource data instead.',
   '',
-  '| Tool | Method | Path | Summary | Status |',
+  '| Client operation | Method | Path | Summary | Status |',
   '| --- | --- | --- | --- | --- |',
 ];
 for (const operation of operations) {
@@ -333,5 +333,5 @@ if (stale) {
   process.exitCode = 1;
 } else {
   const action = check ? 'Verified' : 'Generated';
-  process.stdout.write(`${action} ${operations.length} Hetzner API tools.\n`);
+  process.stdout.write(`${action} ${operations.length} Hetzner API client operations.\n`);
 }

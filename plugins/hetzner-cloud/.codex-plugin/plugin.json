@@ -1,7 +1,7 @@
 {
   "name": "hetzner-cloud",
-  "version": "0.2.0",
-  "description": "Manage Hetzner Cloud and Storage Boxes through an MCP mirror of the official APIs.",
+  "version": "0.3.0",
+  "description": "Manage Hetzner Cloud and Storage Boxes directly from Codex with a local API client and private token setup.",
   "author": {
     "name": "Hanno",
     "url": "https://github.com/hannojg"
@@ -13,15 +13,14 @@
     "hetzner",
     "cloud",
     "storage-box",
-    "mcp",
+    "codex",
     "infrastructure"
   ],
   "skills": "./skills/",
-  "mcpServers": "./.mcp.json",
   "interface": {
     "displayName": "Hetzner Cloud Plugin",
     "shortDescription": "Manage your Hetzner infrastructure",
-    "longDescription": "Use Hetzner Cloud and Storage Boxes from Codex. Mirrors the official APIs with 222 generated tools for servers, volumes, networks, IPs, firewalls, load balancers, DNS, certificates, storage boxes, and other supported resources. Connect through the private local setup page and keep your project API token in your operating system credential store.",
+    "longDescription": "Manage Hetzner Cloud and Storage Boxes with Codex skills and a local API client covering all 222 operations in the official API snapshots. Connect through a private local setup page and keep your project API token in your operating system credential store. API requests run directly from your computer to Hetzner.",
     "developerName": "Hanno",
     "category": "Developer Tools",
     "capabilities": [

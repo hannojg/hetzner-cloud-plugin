@@ -1,25 +1,46 @@
 ---
 name: hetzner-cloud
-description: Manage Hetzner Cloud infrastructure and Storage Boxes with the plugin's MCP tools. Use for project resources, resource actions, and API-backed infrastructure changes.
+description: Manage Hetzner Cloud infrastructure and Storage Boxes through the plugin's local direct API client. Use for project resources, resource actions, and infrastructure changes.
 ---
 
 # Hetzner Cloud
 
-Use the plugin's generated MCP tools to work with Hetzner Cloud and Storage Boxes. Each tool mirrors one documented API operation; follow its input schema and preserve the API's response fields.
+Use the bundled local client for the 222 operations in the official Hetzner API snapshots. Each invocation sends requests directly from this computer to Hetzner.
 
-## Authentication
+## Resolve the client
 
-The MCP retrieves the project API token from the operating system credential store and sends it directly to Hetzner. Tokens belong to a project and have read-only or read/write permissions.
+Resolve Node in the task's default local execution environment before changing directories: use `command -v node` in POSIX shells, or `(Get-Command node).Source` in PowerShell. Use the returned absolute executable path for every client invocation and verify Node.js 22 or newer. If Node is unavailable or too old, tell the user to install or update Node.js; do not search machine-specific runtime locations or introduce another launcher.
 
-If the connection is missing, call `hetzner_configure` with `{}` to open the private local setup page in the user's default browser. Let the user enter their token privately on that page. The page also supports replacing the token and disconnecting. Keep the token out of chat and MCP arguments, and do not inspect the setup page after the user starts entering a token. Use `hetzner_connection_status` to check whether a credential is stored; it does not validate the token with Hetzner. The packaged `hetzner-cloud-setup` skill contains the setup workflow.
+The client is `../../dist/client.mjs` relative to this skill's directory. Resolve that to the actual installed plugin's absolute path. Keep commands in the default working directory and pass both the Node executable and client file as quoted absolute paths. PowerShell requires its `&` call operator before the quoted executable path.
 
-## API workflow
+## Discover and call an operation
 
-- Cloud tool names start with `cloud_`; Storage Boxes API tool names start with `hetzner_`. Inputs use `path`, `query`, and `body` groups where declared. Inspect the tool's schema rather than guessing payload fields.
-- Resolve resource IDs from list/get results and confirm the target project when context is ambiguous. The configured token determines the project.
-- List tools return one API page. Follow the response's pagination metadata when the user needs a complete inventory.
-- Many mutations return an action. Read the relevant action until it reaches a terminal status before reporting the operation complete; report an API error if it fails.
-- Carry out infrastructure changes within the user's request. Clarify an ambiguous target or an unspecified destructive change before issuing that mutation.
-- A timed-out or interrupted mutation may have succeeded. Inspect the resource or action before retrying, especially when creating resources. The MCP does not retry requests automatically.
+1. Run the client with `list <search>` to find operations by resource or action. Cloud names start with `cloud_`; Storage Boxes names start with `hetzner_`.
+2. Run `describe <operation>` for its input schema. Inputs use `path`, `query`, and `body` groups where declared. Use the operation's schema rather than guessing fields.
+3. Run `call <operation>` and provide the JSON input on stdin. Use a quoted heredoc delimiter so shell expansion cannot change user data:
 
-This plugin covers the APIs documented at [docs.hetzner.cloud](https://docs.hetzner.cloud/), including Cloud and Storage Boxes. Robot dedicated-server management, Object Storage's S3 API, and account billing are separate services.
+```sh
+"/absolute/path/to/node" "/actual/plugin/root/dist/client.mjs" call cloud_list_servers <<'JSON'
+{"query":{"per_page":50}}
+JSON
+```
+
+In PowerShell, pipe a literal single-quoted here-string (`@'` … `'@`) into the client invocation instead. Keep JSON values literal in either shell.
+
+The client prints `{status,data,rateLimit}` or an error envelope and exits with status 1 for failures. Preserve Hetzner's response fields when interpreting results.
+
+## Connection
+
+The client retrieves the project API token from the operating system credential store. Run `status` to check whether one is stored; this does not contact Hetzner or verify current token validity.
+
+If setup is needed, run `setup`. It opens a private local browser page in a detached process and returns its URL and expiry. Let the user enter the token privately, then return control to them. Do not read the credential store or inspect that page after token entry starts. Run `status` after the user reports completion. The packaged `hetzner-cloud-setup` skill explains the complete connection workflow.
+
+## Resource workflow
+
+- Resolve resource IDs from list/get results and clarify an ambiguous target. The saved token determines the project and its read-only or read/write permissions.
+- List operations return one API page. Follow `meta.pagination` for a complete inventory.
+- Mutations may return asynchronous actions. Check the relevant action until it reaches `success` or `error` before reporting completion.
+- Carry out changes within the user's request. Creating or resizing resources can incur charges, and deletion can destroy data. Clarify unspecified destructive changes before issuing them.
+- The client makes one request per call and does not retry automatically. A timed-out mutation may have succeeded; inspect the resource or action before repeating it.
+
+Cloud and Storage Boxes are covered. Robot dedicated servers, Object Storage's S3 API, and account billing are separate APIs.

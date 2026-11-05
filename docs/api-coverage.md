@@ -1,7 +1,7 @@
 # API coverage
 
-The MCP mirrors all 222 operations in the checked-in official Hetzner API snapshots: 190 Cloud operations and 32 Hetzner Storage Box operations.
-Each row corresponds to one tool. Tool inputs use `path`, `query`, and `body` groups with the original API field names and request schemas.
+The bundled client mirrors all 222 operations in the checked-in official Hetzner API snapshots: 190 Cloud operations and 32 Hetzner Storage Box operations.
+Each row corresponds to one client operation. Inputs use `path`, `query`, and `body` groups with the original API field names and request schemas.
 
 Cloud resources include servers, server types, volumes, primary and floating IPs, firewalls, networks, load balancers, load balancer types, images, ISOs, SSH keys, certificates, placement groups, DNS zones and RRSets, locations, pricing, and actions.
 The Hetzner API additionally covers Storage Boxes, types, folders, snapshots, subaccounts, and their actions.
@@ -10,7 +10,7 @@ Robot dedicated-server management and S3 Object Storage are separate APIs and ar
 
 Deprecated endpoints are retained for a complete specification mirror. In particular, `GET /datacenters` and `GET /datacenters/{id}` were removed on 2026-10-01; use locations and location-specific resource data instead.
 
-| Tool | Method | Path | Summary | Status |
+| Client operation | Method | Path | Summary | Status |
 | --- | --- | --- | --- | --- |
 | `cloud_add_load_balancer_service` | POST | `/load_balancers/{id}/actions/add_service` | Add Service | Current |
 | `cloud_add_load_balancer_target` | POST | `/load_balancers/{id}/actions/add_target` | Add Target | Current |

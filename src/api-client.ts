@@ -1,4 +1,3 @@
-import type { CallToolResult } from '@modelcontextprotocol/server';
 import { Ajv2020 } from 'ajv/dist/2020.js';
 import type { ValidateFunction } from 'ajv';
 import type { ApiName, Operation } from './api-types.js';
@@ -28,9 +27,13 @@ export interface ClientOptions {
   signal?: AbortSignal;
 }
 
-export function toolResult(payload: Record<string, unknown>, isError = false): CallToolResult {
-  const text = JSON.stringify(payload);
-  return { content: [{ type: 'text', text }], structuredContent: payload, isError };
+export interface ApiResult {
+  isError: boolean;
+  payload: Record<string, unknown>;
+}
+
+export function apiResult(payload: Record<string, unknown>, isError = false): ApiResult {
+  return { payload, isError };
 }
 
 function requestUrl(operation: Operation, args: OperationArguments): URL {
@@ -77,7 +80,7 @@ export async function executeOperation(
   operation: Operation,
   args: unknown,
   options: ClientOptions,
-): Promise<CallToolResult> {
+): Promise<ApiResult> {
   let validate = validators.get(operation);
   if (validate === undefined) {
     validate = ajv.compile<OperationArguments>(operation.inputSchema);
@@ -87,16 +90,16 @@ export async function executeOperation(
   const valid = validate(input);
   if (valid === false) {
     const details = validate.errors;
-    return toolResult({ error: { code: 'invalid_arguments', message: 'Arguments do not match the Hetzner API schema.', details } }, true);
+    return apiResult({ error: { code: 'invalid_arguments', message: 'Arguments do not match the Hetzner API schema.', details } }, true);
   }
   let token: string | null;
   try {
     token = await options.store.read();
   } catch {
-    return toolResult({ error: { code: 'credential_store_unavailable', message: 'The system credential store could not be read. Unlock it and try again.' } }, true);
+    return apiResult({ error: { code: 'credential_store_unavailable', message: 'The system credential store could not be read. Unlock it and try again.' } }, true);
   }
   if (token === null) {
-    return toolResult({ error: { code: 'not_connected', message: 'Run Hetzner Cloud plugin setup to connect your project. Enter the API token only in the private setup page.' } }, true);
+    return apiResult({ error: { code: 'not_connected', message: 'Run Hetzner Cloud plugin setup to connect your project. Enter the API token only in the private setup page.' } }, true);
   }
 
   const url = requestUrl(operation, input);
@@ -142,14 +145,14 @@ export async function executeOperation(
         payload.data = JSON.parse(text);
       } catch {
         payload.error = { code: 'invalid_response', message: 'Hetzner returned a response that is not JSON.' };
-        return toolResult(payload, true);
+        return apiResult(payload, true);
       }
     }
     const failed = response.ok === false;
-    return toolResult(payload, failed);
+    return apiResult(payload, failed);
   } catch {
     const aborted = signal.aborted;
     const code = aborted ? 'request_aborted' : 'request_failed';
-    return toolResult({ error: { code, message: 'The Hetzner request did not complete. Its outcome may be unknown; check the resource before repeating a write.' } }, true);
+    return apiResult({ error: { code, message: 'The Hetzner request did not complete. Its outcome may be unknown; check the resource before repeating a write.' } }, true);
   }
 }

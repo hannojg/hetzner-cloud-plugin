@@ -10,7 +10,7 @@ await verifyNativeArtifacts();
 const result = await build({
   absWorkingDir: root,
   entryPoints: ['src/index.ts'],
-  outfile: 'plugins/hetzner-cloud/dist/server.mjs',
+  outfile: 'plugins/hetzner-cloud/dist/client.mjs',
   bundle: true,
   platform: 'node',
   format: 'esm',
@@ -43,4 +43,4 @@ for (const file of result.outputFiles) {
     await writeFile(file.path, file.contents);
   }
 }
-console.log(check ? 'Committed MCP bundle is current.' : 'Built standalone MCP bundle.');
+console.log(check ? 'Committed client bundle is current.' : 'Built standalone local client.');

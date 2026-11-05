@@ -1,7 +1,7 @@
 # Official API snapshots
 
 These unmodified OpenAPI documents were downloaded from Hetzner on 2026-11-05.
-They are the source of truth for generated MCP tools. No schema download occurs at server startup.
+They are the source of truth for generated client operations. No schema download occurs when the client runs.
 
 | File | Official source | Operations | SHA-256 |
 | --- | --- | ---: | --- |
@@ -12,4 +12,4 @@ To update the API surface, replace these files with fresh official downloads, th
 Review API changes before committing; generated files are deterministic. `npm run generate -- --check` detects stale generated files.
 
 The generator preserves JSON Schema request semantics, including unions and compositions. It removes the OpenAPI-only `example`, `xml`, `externalDocs`, and `discriminator` annotations from input schemas.
-Deprecated operations remain in the mirror and are marked in tool descriptions and the coverage reference. The datacenter endpoints were removed by Hetzner on 2026-10-01 and should not be used.
+Deprecated operations remain in the mirror and are marked in operation descriptions and the coverage reference. The datacenter endpoints were removed by Hetzner on 2026-10-01 and should not be used.

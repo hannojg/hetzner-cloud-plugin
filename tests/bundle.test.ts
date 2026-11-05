@@ -1,45 +1,40 @@
 import assert from 'node:assert/strict';
+import { execFile } from 'node:child_process';
 import { mkdtemp, cp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
 import test from 'node:test';
-import { Client } from '@modelcontextprotocol/client';
-import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
+import { operations } from '../src/generated/operations.js';
 
-function requireRecord(value: unknown): asserts value is Record<string, unknown> {
-  assert.ok(value);
-  assert.equal(typeof value, 'object');
-  const array = Array.isArray(value);
-  assert.equal(array, false);
-}
+const executeFile = promisify(execFile);
 
-test('committed bundle starts from a standalone plugin directory without npm dependencies or credentials', { timeout: 30000 }, async () => {
+test('standalone client lists and describes APIs with the restricted desktop PATH and no credentials', { timeout: 30000 }, async () => {
   const temporaryRoot = tmpdir();
-  const prefix = join(temporaryRoot, 'hetzner-plugin-test-');
+  const prefix = join(temporaryRoot, 'hetzner-direct-test-');
   const temporaryPath = await mkdtemp(prefix);
   const pluginUrl = new URL('../plugins/hetzner-cloud/', import.meta.url);
   const pluginPath = fileURLToPath(pluginUrl);
   await cp(pluginPath, temporaryPath, { recursive: true });
-  const transport = new StdioClientTransport({ command: process.execPath, args: ['./dist/server.mjs'], cwd: temporaryPath, stderr: 'pipe' });
-  const client = new Client({ name: 'bundle-smoke-test', version: '0.1.0' });
-  let stderr = '';
-  transport.stderr?.on('data', (chunk) => {
-    stderr += String(chunk);
-  });
+  const bundle = join(temporaryPath, 'dist', 'client.mjs');
+  const env = { ...process.env, PATH: '/usr/bin:/bin' };
+  const options = { cwd: temporaryPath, env, timeout: 10000 };
   try {
-    await client.connect(transport);
-    const listed = await client.listTools();
-    assert.equal(listed.tools.length, 224);
-    const result = await client.callTool({ name: 'hetzner_connection_status', arguments: { token: 'rejected-before-keyring-access' } });
-    assert.equal(result.isError, true);
-    const payload = result.structuredContent;
-    requireRecord(payload);
-    const error = payload.error as Record<string, unknown>;
-    assert.equal(error.code, 'invalid_arguments');
-    assert.equal(stderr, '');
+    const listed = await executeFile(process.execPath, [bundle, 'list'], options);
+    assert.equal(listed.stderr, '');
+    const listPayload = JSON.parse(listed.stdout);
+    assert.equal(listPayload.count, 222);
+    assert.equal(listPayload.operations.length, 222);
+    const selected = operations.find((item) => item.api === 'cloud' && item.operationId === 'list_servers');
+    assert.ok(selected);
+    const described = await executeFile(process.execPath, [bundle, 'describe', selected.name], options);
+    assert.equal(described.stderr, '');
+    const description = JSON.parse(described.stdout);
+    const serialized = JSON.stringify(description);
+    const describesSelected = serialized.includes(selected.name);
+    assert.equal(describesSelected, true);
   } finally {
-    await client.close();
     await rm(temporaryPath, { recursive: true, force: true });
   }
 });

@@ -1,8 +1,14 @@
-import type { Tool } from '@modelcontextprotocol/server';
-
 export type ApiName = 'cloud' | 'hetzner';
 
 export type JsonSchema = Record<string, unknown>;
+
+export interface JsonObjectSchema {
+  type: 'object';
+  properties: Record<string, unknown>;
+  required?: string[];
+  additionalProperties: boolean;
+  [key: string]: unknown;
+}
 
 export interface OperationParameter {
   name: string;
@@ -20,7 +26,7 @@ export interface Operation {
   summary: string;
   description: string;
   deprecated: boolean;
-  inputSchema: Tool['inputSchema'];
+  inputSchema: JsonObjectSchema;
   parameters: OperationParameter[];
   annotations: {
     readOnlyHint: boolean;

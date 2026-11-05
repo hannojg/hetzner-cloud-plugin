@@ -49,7 +49,7 @@ macOS uses Keychain, Windows uses Credential Manager, and Linux requires a runni
 Linux entries are explicitly pinned to Secret Service; the kernel keyring is not used.
 Other operating systems and architectures are unsupported and produce an explicit error when credential storage is used.
 
-Native loading and credential access are lazy. Listing MCP tools never opens a credential store.
+Native loading and credential access are lazy. Listing API operations never opens a credential store.
 The loader selects exactly one binary from the current OS, architecture, and Node.js libc report.
 
 manifest.json records the npm source URL, npm integrity, and SHA-256 of each committed binary and license.
