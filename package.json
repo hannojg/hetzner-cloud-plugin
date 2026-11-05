@@ -1,0 +1,28 @@
+{
+  "name": "hetzner-cloud-plugin",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Codex plugin mirroring the official Hetzner Cloud and Storage Box APIs over MCP",
+  "type": "module",
+  "license": "MIT",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "generate": "node scripts/generate-api.mjs",
+    "build": "node scripts/build.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test tests/*.test.ts",
+    "check:host": "node scripts/check-host.mjs",
+    "check": "npm run typecheck && node scripts/generate-api.mjs --check && node scripts/build.mjs --check && npm test"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "2.4.0",
+    "ajv": "8.20.0"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/client": "2.4.0",
+    "@types/node": "^22.0.0",
+    "esbuild": "0.28.2",
+    "tsx": "^4.20.0",
+    "typescript": "7.0.2"
+  }
+}

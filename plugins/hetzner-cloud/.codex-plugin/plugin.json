@@ -1,0 +1,39 @@
+{
+  "name": "hetzner-cloud",
+  "version": "0.1.0",
+  "description": "Manage Hetzner Cloud and Storage Boxes through an MCP mirror of the official APIs.",
+  "author": {
+    "name": "Hanno",
+    "url": "https://github.com/hannojg"
+  },
+  "homepage": "https://github.com/hannojg/hetzner-cloud-plugin#readme",
+  "repository": "https://github.com/hannojg/hetzner-cloud-plugin",
+  "license": "MIT",
+  "keywords": [
+    "hetzner",
+    "cloud",
+    "storage-box",
+    "mcp",
+    "infrastructure"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Hetzner Cloud Plugin",
+    "shortDescription": "Manage your Hetzner infrastructure",
+    "longDescription": "Use Hetzner Cloud and Storage Boxes from Codex. Mirrors the official APIs with 222 generated tools for servers, volumes, networks, IPs, firewalls, load balancers, DNS, certificates, storage boxes, and other supported resources. Connect using your project's Hetzner API token.",
+    "developerName": "Hanno",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/hannojg/hetzner-cloud-plugin",
+    "defaultPrompt": [
+      "List my Hetzner servers and their status.",
+      "Show the firewall rules for my project.",
+      "List my Storage Boxes and their usage."
+    ],
+    "brandColor": "#D50C2D"
+  }
+}
