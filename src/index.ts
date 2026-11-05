@@ -1,13 +1,13 @@
 import { fileURLToPath } from 'node:url';
-import { KeyringCredentialStore } from './credential-store.js';
+import { KeyringProjectStore } from './project-store.js';
 import { runClient } from './client.js';
 import { launchSetup } from './setup-launcher.js';
 import { startSetup } from './setup-server.js';
 import { openBrowser } from './browser.js';
 
 async function setupServer(): Promise<void> {
-  const store = new KeyringCredentialStore();
-  const session = await startSetup({ store });
+  const projects = new KeyringProjectStore();
+  const session = await startSetup({ projects });
   try {
     await openBrowser(session.url);
     process.send?.({ url: session.url, expiresAt: session.expiresAt });
@@ -23,7 +23,7 @@ async function main(): Promise<void> {
     await setupServer();
     return;
   }
-  const store = new KeyringCredentialStore();
+  const projects = new KeyringProjectStore();
   let input: string | undefined;
   if (args[0] === 'call' && process.stdin.isTTY !== true) {
     const buffers: Buffer[] = [];
@@ -38,7 +38,7 @@ async function main(): Promise<void> {
   async function setup() {
     return launchSetup(entrypoint);
   }
-  const result = await runClient(args, { store, input, setup });
+  const result = await runClient(args, { projects, input, setup });
   const json = JSON.stringify(result.payload);
   process.stdout.write(`${json}\n`);
   process.exitCode = result.isError ? 1 : 0;

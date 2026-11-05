@@ -1,7 +1,7 @@
 {
   "name": "hetzner-cloud",
-  "version": "0.3.0",
-  "description": "Manage Hetzner Cloud and Storage Boxes directly from Codex with a local API client and private token setup.",
+  "version": "0.4.0",
+  "description": "Manage Hetzner Cloud and Storage Boxes projects directly from Codex with a local API client and private token setup.",
   "author": {
     "name": "Hanno",
     "url": "https://github.com/hannojg"
@@ -20,7 +20,7 @@
   "interface": {
     "displayName": "Hetzner Cloud Plugin",
     "shortDescription": "Manage your Hetzner infrastructure",
-    "longDescription": "Manage Hetzner Cloud and Storage Boxes with Codex skills and a local API client covering all 222 operations in the official API snapshots. Connect through a private local setup page and keep your project API token in your operating system credential store. API requests run directly from your computer to Hetzner.",
+    "longDescription": "Manage Hetzner Cloud and Storage Boxes with Codex skills and a local API client covering all 222 operations in the official API snapshots. Save independent project tokens under local names, choose the project for each task, and keep credentials in your operating system credential store. API requests run directly from your computer to Hetzner.",
     "developerName": "Hanno",
     "category": "Developer Tools",
     "capabilities": [

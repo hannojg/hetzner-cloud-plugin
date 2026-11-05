@@ -17,7 +17,7 @@ export function setupPage(nonce: string): string {
     .dot { width: 8px; height: 8px; background: #aaadb5; border-radius: 50%; }
     .connected .dot { background: #21824b; }
     .connected { color: #21824b; }
-    label { display: block; font-size: 14px; font-weight: 650; margin-bottom: 9px; }
+    label { display: block; font-size: 14px; font-weight: 650; margin: 20px 0 9px; }
     input { width: 100%; padding: 13px 14px; border: 1px solid #c7c9d1; border-radius: 9px; font: inherit; }
     input:focus { outline: 3px solid #d50c2d20; border-color: #b80b29; }
     button { width: 100%; margin-top: 16px; padding: 13px 18px; border: 0; border-radius: 9px; font: inherit; font-weight: 650; background: #bf0b2a; color: white; cursor: pointer; }
@@ -42,11 +42,15 @@ export function setupPage(nonce: string): string {
     <section class="card">
       <div id="status" class="status"><span class="dot"></span><span id="status-label">Checking connection…</span></div>
       <form id="connect-form">
+        <label for="project">Project name</label>
+        <input id="project" name="project" type="text" list="projects" value="Default" autocomplete="off" spellcheck="false" maxlength="30" required disabled>
+        <datalist id="projects"><option value="Default"></option></datalist>
+        <p class="hint">Choose a saved project or enter a new name. Each project has its own token. This is a local label; it does not create a project at Hetzner.</p>
         <label for="token">Project API token</label>
-        <input id="token" name="token" type="password" placeholder="Paste your Hetzner API token" autocomplete="off" spellcheck="false" maxlength="512" required>
-        <button id="save" type="submit">Connect project</button>
+        <input id="token" name="token" type="password" placeholder="Paste your Hetzner API token" autocomplete="off" spellcheck="false" maxlength="512" required disabled>
+        <button id="save" type="submit" disabled>Connect project</button>
       </form>
-      <button id="disconnect" class="secondary" type="button" hidden>Remove connection</button>
+      <button id="disconnect" class="secondary" type="button" hidden>Remove this connection</button>
       <p class="hint">Create a token in <a href="https://console.hetzner.com/" target="_blank" rel="noreferrer">Hetzner Console</a> under your project's Security → API Tokens.</p>
       <p class="hint">Your token is stored in your system credential store. It is sent directly to Hetzner to verify access and make API requests.</p>
       <p id="message" role="status" aria-live="polite" hidden></p>
@@ -56,12 +60,22 @@ export function setupPage(nonce: string): string {
   <script nonce="${nonce}">
     const form = document.getElementById('connect-form');
     const input = document.getElementById('token');
+    const projectInput = document.getElementById('project');
+    const projectOptions = document.getElementById('projects');
     const save = document.getElementById('save');
     const disconnect = document.getElementById('disconnect');
     const status = document.getElementById('status');
     const label = document.getElementById('status-label');
     const message = document.getElementById('message');
     const basePath = location.pathname;
+    let projects = [];
+
+    function projectName() {
+      const trimmed = projectInput.value.trim();
+      const normalized = trimmed.normalize('NFC');
+      const lower = normalized.toLowerCase();
+      return lower === 'default' ? 'Default' : normalized;
+    }
 
     function showMessage(text, error) {
       message.textContent = text;
@@ -69,8 +83,10 @@ export function setupPage(nonce: string): string {
       message.hidden = false;
     }
 
-    function updateConnection(connected) {
-      label.textContent = connected ? 'Project connected' : 'No project connected';
+    function updateConnection() {
+      const project = projectName();
+      const connected = projects.includes(project);
+      label.textContent = connected ? 'Selected project connected' : 'New project connection';
       status.classList.toggle('connected', connected);
       save.textContent = connected ? 'Replace token' : 'Connect project';
       disconnect.hidden = connected === false;
@@ -80,6 +96,7 @@ export function setupPage(nonce: string): string {
       save.disabled = busy;
       disconnect.disabled = busy;
       input.disabled = busy;
+      projectInput.disabled = busy;
     }
 
     async function request(action, data) {
@@ -107,12 +124,14 @@ export function setupPage(nonce: string): string {
       event.preventDefault();
       const token = input.value.trim();
       if (token.length === 0) return;
+      const project = projectName();
       setBusy(true);
       message.hidden = true;
       try {
-        const result = await request('connect', { token });
+        const result = await request('connect', { project, token });
         input.value = '';
-        updateConnection(result.connected);
+        projectInput.value = result.project;
+        await loadStatus(false);
         showMessage('Connected. You can return to Codex; the connection is ready immediately.', false);
       } catch (error) {
         showMessage(error.message, true);
@@ -124,9 +143,10 @@ export function setupPage(nonce: string): string {
     disconnect.addEventListener('click', async () => {
       setBusy(true);
       try {
-        const result = await request('disconnect', {});
+        const project = projectName();
+        await request('disconnect', { project });
         input.value = '';
-        updateConnection(result.connected);
+        await loadStatus(false);
         showMessage('The saved token has been removed from this computer. To revoke the token itself, delete it in Hetzner Console.', false);
       } catch (error) {
         showMessage(error.message, true);
@@ -135,16 +155,36 @@ export function setupPage(nonce: string): string {
       }
     });
 
-    async function loadStatus() {
+    projectInput.addEventListener('input', () => {
+      input.value = '';
+      message.hidden = true;
+      updateConnection();
+    });
+
+    async function loadStatus(initial) {
       try {
         const result = await request('status');
-        updateConnection(result.connected);
+        projects = result.projects;
+        projectOptions.replaceChildren();
+        for (const project of projects) {
+          const option = document.createElement('option');
+          option.value = project;
+          projectOptions.append(option);
+        }
+        if (initial && projects.length > 0) {
+          const hasDefault = projects.includes('Default');
+          projectInput.value = hasDefault ? 'Default' : projects[0];
+          input.value = '';
+        }
+        updateConnection();
       } catch (error) {
         label.textContent = 'Connection unavailable';
         showMessage(error.message, true);
+      } finally {
+        if (initial) setBusy(false);
       }
     }
-    loadStatus();
+    loadStatus(true);
   </script>
 </body>
 </html>`;

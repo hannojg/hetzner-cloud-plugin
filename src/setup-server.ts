@@ -1,12 +1,13 @@
 import { createServer } from 'node:http';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { randomBytes } from 'node:crypto';
-import type { CredentialStore } from './credential-store.js';
+import { normalizeProjectName } from './project-store.js';
+import type { ProjectStore } from './project-store.js';
 import { setupPage } from './setup-page.js';
 import { version } from './version.js';
 
 interface SetupOptions {
-  store: CredentialStore;
+  projects: ProjectStore;
   fetch?: typeof globalThis.fetch;
   timeoutMs?: number;
 }
@@ -95,9 +96,8 @@ export async function startSetup(options: SetupOptions): Promise<SetupSession> {
     }
     if (request.method === 'GET' && request.url === `${path}/status`) {
       try {
-        const token = await options.store.read();
-        const connected = token !== null;
-        respond(response, 200, { connected });
+        const projects = await options.projects.list();
+        respond(response, 200, { projects });
       } catch {
         error(response, 503, 'credential_store_unavailable', 'Your system credential store could not be opened. Unlock it and try again.');
       }
@@ -128,20 +128,26 @@ export async function startSetup(options: SetupOptions): Promise<SetupSession> {
       const body = await readBody(request, response);
       if (body === null) return;
       const keys = Object.keys(body);
+      const project = normalizeProjectName(body.project);
+      if (project === null) {
+        error(response, 400, 'invalid_project', 'Enter a project name with 1 to 30 characters and no control characters.');
+        return;
+      }
+      const store = options.projects.forProject(project);
       if (disconnect) {
-        if (keys.length > 0) {
-          error(response, 400, 'invalid_request', 'Removing a connection takes no parameters.');
+        if (keys.length !== 1) {
+          error(response, 400, 'invalid_request', 'Choose the project connection to remove.');
           return;
         }
         try {
-          await options.store.remove();
-          respond(response, 200, { connected: false });
+          await store.remove();
+          respond(response, 200, { project, connected: false });
         } catch {
           error(response, 503, 'credential_store_unavailable', 'The saved token could not be removed. Unlock your system credential store and try again.');
         }
         return;
       }
-      if (keys.length !== 1 || typeof body.token !== 'string') {
+      if (keys.length !== 2 || typeof body.token !== 'string') {
         error(response, 400, 'invalid_request', 'Enter a project API token.');
         return;
       }
@@ -176,8 +182,8 @@ export async function startSetup(options: SetupOptions): Promise<SetupSession> {
       }
       if (abort.signal.aborted) return;
       try {
-        await options.store.write(token);
-        respond(response, 200, { connected: true });
+        await store.write(token);
+        respond(response, 200, { project, connected: true });
       } catch {
         error(response, 503, 'credential_store_unavailable', 'Your token could not be saved. Unlock your system credential store and try again.');
       }

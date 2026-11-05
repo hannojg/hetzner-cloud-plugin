@@ -11,7 +11,7 @@ This is an independent community project. Robot dedicated servers, Object Storag
 - Codex with local plugin support and a browser on the same computer.
 - Node.js 22 or newer on the local shell's PATH. POSIX shells and Windows PowerShell are supported.
 - An available operating system credential store: macOS Keychain, Windows Credential Manager, or Linux Secret Service.
-- A Hetzner project API token. A read-only token can inspect resources; read/write permissions allow changes.
+- A Hetzner API token for each project you want to use. A read-only token can inspect resources; read/write permissions allow changes.
 
 The plugin includes its built client and dependencies. Users can install the package directly without building it or running `npm install`.
 
@@ -26,13 +26,16 @@ codex plugin add hetzner-cloud@hetzner-cloud
 
 You can also add the repository as a marketplace in Codex's plugin settings, then install **Hetzner Cloud Plugin**. Start a new chat after installation so its skills are available.
 
-## Connect your project
+## Connect your projects
 
 1. Select **Setup** on the installed plugin, or ask Codex: **“Set up my Hetzner Cloud Plugin connection.”**
 2. The setup skill opens a private local page in your default browser.
-3. Create an API token in [Hetzner Console](https://console.hetzner.com/) under **Project → Security → API Tokens**, paste it into that page, and select **Connect**.
+3. Enter a local project name, such as `Production` or `Staging`, or choose a saved project. New setup starts with `Default`; a saved project is preselected when available.
+4. Create an API token in [Hetzner Console](https://console.hetzner.com/) under **Project → Security → API Tokens**, paste it into that page, and select **Connect**.
 
-The page validates the token with a read-only request, then stores it in your operating system credential store. The connection survives Codex and computer restarts. Run setup again to replace the token or use **Disconnect** to delete it.
+The page validates the token with a read-only request, then stores it independently for that project name in your operating system credential store. Connections survive Codex and computer restarts. Run setup again to add another project. Select a saved project to replace its token or use **Disconnect** to delete that project's credential.
+
+Project names are local aliases for your saved tokens. The local registry stores project-name metadata; API tokens remain in the operating system credential store. Names are not discovered automatically from your Hetzner account. An existing token from an earlier plugin version appears as `Default`.
 
 The setup page runs on `127.0.0.1` on your own computer for up to ten minutes. Its process runs independently while you enter the token. Enter it only in that page: the token stays out of chat and command arguments. The local client retrieves it from the credential store when making API requests.
 
@@ -54,7 +57,11 @@ Choose the **Hetzner Cloud Plugin** or invoke its `hetzner-cloud` skill, then de
 
 > List my Storage Boxes and their usage.
 
-Codex discovers operations and their schemas through the bundled client, then runs the selected operation locally. The client uses the saved token to authenticate directly with Hetzner. Resource access and permissions are enforced by Hetzner.
+Codex first checks which projects are saved. With one project, it uses that project automatically. With several projects, it asks which one to use before making API requests unless you have already selected one for the task. You can name it directly:
+
+> List my servers in Production.
+
+Codex then discovers operations and their schemas through the bundled client and runs them locally with the selected project's token. The choice applies to the current task; there is no globally selected project when several are saved. Resource access and permissions are enforced by Hetzner.
 
 This is a **skill-only plugin**. It does not register an MCP server or require a hosted service. A short-lived local server exists only while the setup page is open.
 
@@ -66,19 +73,23 @@ The installed plugin's client is `plugins/hetzner-cloud/dist/client.mjs` in this
 | --- | --- |
 | `list [search]` | List operation names and summaries, optionally filtered. |
 | `describe <operation>` | Show the operation's path, query, and body schema. |
-| `call <operation>` | Read JSON arguments from stdin and make one API request. |
-| `status` | Report whether a credential is stored: `{connected:boolean}`. |
+| `call <operation> [--project <name>]` | Read JSON arguments from stdin and make one API request using the named project's token. |
+| `projects` | List saved local project names: `{projects:string[]}`. |
+| `status` | Return `{projects:string[],connected:boolean}`; `connected` means at least one project is saved. |
+| `status --project <name>` | Return the saved names plus `project` and that project's `connected` state. |
 | `setup` | Open private token setup; return `{url,expiresAt}` and exit. |
 
-Cloud operation names start with `cloud_`; Storage Boxes names start with `hetzner_`. Inputs use `path`, `query`, and `body` groups where declared in the API schema. For example, after resolving the actual absolute paths:
+Cloud operation names start with `cloud_`; Storage Boxes names start with `hetzner_`. Inputs use `path`, `query`, and `body` groups where declared in the API schema. For a saved project named `Production`, after resolving the actual absolute paths:
 
 ```sh
-"/absolute/path/to/node" "/actual/plugin/root/dist/client.mjs" call cloud_list_servers <<'JSON'
+"/absolute/path/to/node" "/actual/plugin/root/dist/client.mjs" call cloud_list_servers --project "Production" <<'JSON'
 {"query":{"per_page":50}}
 JSON
 ```
 
-The quoted heredoc keeps the shell from expanding JSON values. In PowerShell, pipe a literal single-quoted here-string (`@'` … `'@`) into the client invocation. API tokens are never supplied through this command. `call` prints the upstream result in an envelope containing `status`, `data`, and rate-limit details, or an error; failures exit with status 1. `status` checks stored credential presence, not current Hetzner validity.
+The quoted heredoc keeps the shell from expanding JSON values. In PowerShell, pipe a literal single-quoted here-string (`@'` … `'@`) into the client invocation. API tokens are never supplied through this command. `call` prints the selected `project` alongside the upstream `status`, `data`, and rate-limit details, or an error; failures exit with status 1. `projects` and `status` inspect local configuration without contacting Hetzner or verifying token validity.
+
+When exactly one project is saved, `call` can omit `--project`. With several projects, omitting it returns `project_required` and the saved names without making an API request. With no saved project, it returns `not_connected`; an explicit unknown name returns `project_not_found`. Pass the selected project on every API call, including later pages and asynchronous action checks.
 
 ## API behavior
 
@@ -96,7 +107,7 @@ codex plugin marketplace upgrade hetzner-cloud
 codex plugin add hetzner-cloud@hetzner-cloud
 ```
 
-Restart Codex and start a new chat after updating. Version 0.3.0 uses skills and the local direct API client. It retains the private setup flow and OS credential storage introduced in 0.2.0.
+Restart Codex and start a new chat after updating. Version 0.4.0 adds independent named project connections while retaining the skill-only local client and private setup flow. Your existing saved token is available as `Default`.
 
 ## Development
 

@@ -23,3 +23,35 @@ export class MemoryStore {
     this.value = null;
   }
 }
+
+export class MemoryProjects {
+  readonly entries = new Map<string, MemoryStore>();
+  readonly selected: string[] = [];
+  listCalls = 0;
+
+  constructor(initial: Record<string, string> = {}) {
+    const entries = Object.entries(initial);
+    for (const [name, token] of entries) {
+      const store = new MemoryStore(token);
+      this.entries.set(name, store);
+    }
+  }
+
+  async list(): Promise<string[]> {
+    this.listCalls += 1;
+    const names: string[] = [];
+    for (const [name, store] of this.entries) {
+      if (store.value !== null) names.push(name);
+    }
+    return names;
+  }
+
+  forProject(name: string): MemoryStore {
+    this.selected.push(name);
+    const existing = this.entries.get(name);
+    if (existing) return existing;
+    const store = new MemoryStore();
+    this.entries.set(name, store);
+    return store;
+  }
+}

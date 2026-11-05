@@ -1,6 +1,6 @@
 ---
 name: hetzner-cloud-setup
-description: Connect, replace, or disconnect the Hetzner Cloud Plugin's project API token through its private local setup page. Use for plugin setup and authentication changes.
+description: Add, replace, or disconnect named Hetzner project API tokens through the plugin's private local setup page. Use for plugin setup and project authentication changes.
 ---
 
 # Set up Hetzner Cloud
@@ -11,10 +11,12 @@ The bundled client is `../../dist/client.mjs` relative to this skill's directory
 
 `setup` opens the user's default browser and starts a detached local session that expires after ten minutes. It returns `{url,expiresAt}` and exits, so the user can complete the page privately. If the session expires, run `setup` again. Explain a browser-launch or credential-store error before retrying.
 
-Tell the user to paste their project API token into the opened page and select **Connect**. They can create a token in [Hetzner Console](https://console.hetzner.com/) under **Project → Security → API Tokens**. The page validates it with a read-only request and stores it in the operating system credential store. It also supports replacing the saved token and disconnecting.
+Tell the user to enter a local project name, paste that project's API token into the opened page, and select **Connect**. New setup starts with `Default`; an existing saved project may be preselected. Names such as `Production` or `Staging` are local aliases, not automatic Hetzner project discovery. They can create a token in [Hetzner Console](https://console.hetzner.com/) under **Project → Security → API Tokens**. The page validates the token with a read-only request and stores it independently for that alias in the operating system credential store. Selecting a saved project lets the user replace its token or disconnect that project. An existing token from earlier plugin versions appears as `Default`.
 
 Do not request the API token in chat, pass it to shell commands or client arguments, read the credential store, or inspect the setup page's DOM, screenshots, network requests, or console after token entry starts. Return control to the user while they complete the page.
 
-After the user reports completion, invoke the same client with `status` to check `{connected:boolean}`. This checks credential presence, not current Hetzner validity. If the user asks to verify API access, use `describe cloud_list_servers` and a read-only `call cloud_list_servers` with JSON on stdin.
+After the user reports completion, invoke the same client with `projects` or `status` to check the saved project names and connection state. `status --project "<name>"` checks a specific alias. These commands inspect local configuration, not current Hetzner validity.
+
+If the user asks to verify API access, use the sole saved project automatically. If multiple projects are saved, ask which one to use before making an API request unless the user has already selected one unambiguously for the current task. Run `describe cloud_list_servers`, then a read-only `call cloud_list_servers --project "<exact saved name>"` with JSON on stdin. Include `--project` on every API call when multiple projects are saved; the choice applies to the current task only.
 
 Credentials stay in macOS Keychain, Windows Credential Manager, or Linux Secret Service. If that store is unavailable or locked, explain the reported error so the user can enable or unlock it. The client does not accept API tokens through environment variables or plaintext files.

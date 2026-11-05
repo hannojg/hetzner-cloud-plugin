@@ -1,6 +1,6 @@
 {
   "name": "hetzner-cloud-plugin",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "description": "Codex skills for direct local access to the Hetzner Cloud and Storage Boxes APIs",
   "type": "module",

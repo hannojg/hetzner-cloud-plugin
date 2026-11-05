@@ -1,17 +1,28 @@
 import { apiResult, executeOperation } from './api-client.js';
 import type { ApiResult } from './api-client.js';
-import type { CredentialStore } from './credential-store.js';
+import { normalizeProjectName } from './project-store.js';
+import type { ProjectStore } from './project-store.js';
 import { operations } from './generated/operations.js';
 
 export interface ClientOptions {
-  store: CredentialStore;
+  projects: ProjectStore;
   fetch?: typeof globalThis.fetch;
   input?: string;
   setup?: () => Promise<{ url: string; expiresAt: string }>;
 }
 
 function invalidArguments(): ApiResult {
-  return apiResult({ error: { code: 'invalid_arguments', message: 'Use list [search], describe <operation>, call <operation>, status, or setup. API call arguments are JSON on stdin.' } }, true);
+  return apiResult({ error: { code: 'invalid_arguments', message: 'Use list [search], describe <operation>, call <operation> [--project <name>], projects, status [--project <name>], or setup. API call arguments are JSON on stdin.' } }, true);
+}
+
+function projectArgument(args: string[], offset: number): string | null | undefined {
+  if (args.length === offset) return undefined;
+  if (args.length !== offset + 2 || args[offset] !== '--project') return null;
+  return normalizeProjectName(args[offset + 1]);
+}
+
+function credentialError(): ApiResult {
+  return apiResult({ error: { code: 'credential_store_unavailable', message: 'The system credential store could not be read. Unlock it and try again.' } }, true);
 }
 
 export async function runClient(args: string[], options: ClientOptions): Promise<ApiResult> {
@@ -35,7 +46,8 @@ export async function runClient(args: string[], options: ClientOptions): Promise
     return apiResult({ operations: catalog, count: catalog.length });
   }
   if (command === 'describe' || command === 'call') {
-    if (args.length !== 2) return invalidArguments();
+    const project = projectArgument(args, 2);
+    if (args.length < 2 || project === null || (command === 'describe' && args.length !== 2)) return invalidArguments();
     const operation = operations.find((item) => item.name === args[1]);
     if (operation === undefined) {
       return apiResult({ error: { code: 'unknown_operation', message: 'Unknown Hetzner API operation. Use list to find an operation.' } }, true);
@@ -50,16 +62,42 @@ export async function runClient(args: string[], options: ClientOptions): Promise
         return apiResult({ error: { code: 'invalid_json', message: 'API call arguments must be valid JSON on stdin.' } }, true);
       }
     }
-    return executeOperation(operation, input, options);
-  }
-  if (command === 'status') {
-    if (args.length !== 1) return invalidArguments();
+    let projects: string[];
     try {
-      const token = await options.store.read();
-      const connected = token !== null;
-      return apiResult({ connected });
+      projects = await options.projects.list();
     } catch {
-      return apiResult({ error: { code: 'credential_store_unavailable', message: 'The system credential store could not be read. Unlock it and try again.' } }, true);
+      return credentialError();
+    }
+    let selected = project;
+    if (selected === undefined) {
+      if (projects.length > 1) {
+        return apiResult({ error: { code: 'project_required', message: 'Ask the user which project to use, then pass --project with that name.' }, projects }, true);
+      }
+      selected = projects[0];
+      if (selected === undefined) {
+        return apiResult({ error: { code: 'not_connected', message: 'Run Hetzner Cloud plugin setup to connect a project.' } }, true);
+      }
+    } else if (projects.includes(selected) === false) {
+      return apiResult({ error: { code: 'project_not_found', message: 'This project is not connected. Choose a saved project or run setup.' }, projects }, true);
+    }
+    const store = options.projects.forProject(selected);
+    const result = await executeOperation(operation, input, { store, fetch: options.fetch });
+    result.payload.project = selected;
+    return result;
+  }
+  if (command === 'status' || command === 'projects') {
+    const project = projectArgument(args, 1);
+    if (project === null || (command === 'projects' && args.length !== 1)) return invalidArguments();
+    try {
+      const projects = await options.projects.list();
+      if (command === 'projects') return apiResult({ projects });
+      if (project === undefined) {
+        return apiResult({ projects, connected: projects.length > 0 });
+      }
+      const connected = projects.includes(project);
+      return apiResult({ projects, project, connected });
+    } catch {
+      return credentialError();
     }
   }
   if (command === 'setup') {
